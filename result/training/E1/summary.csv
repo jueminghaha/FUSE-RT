@@ -1,0 +1,2 @@
+experiment_key,n_completed_seeds,best_valid_score_mean,best_valid_score_std,best_epoch_mean,best_epoch_std,elapsed_min_mean,elapsed_min_std
+E1,10,38.57722294756906,2.5673237146381487,91.0,16.3707055437449,172.6748097229004,23.360135813255148

@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E5,M1 RadonPy pretrain × R1 device encoder + multitask heads,10,True,34.267024350065554,1.98355052407175,31.086047997659087,37.73579185889611,61.6,21.07763427585427,33.0,94.0,240.32258012811343,92.87298743671734,127.91427456935249,417.5055603424708

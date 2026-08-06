@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Model checkpoints are kept locally and are not published to GitHub.
+checkpoints/
+
+# Detailed predictions/caches stay local; curated result tables remain tracked.
+result/_runs/
+
+# Local RepoRT snapshot and generated split artifacts are rebuilt on each server.
+data/RepoRT_latest/
+data/processed/
+
+# Project-specific raw exports are private local inputs and are not distributed.
+/data/raw/

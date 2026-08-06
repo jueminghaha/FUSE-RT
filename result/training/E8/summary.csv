@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E8,M2 joint multitask × R1 device encoder + multitask heads,10,True,33.474238327212504,1.821513981129092,31.12233379690687,36.6581313091638,69.3,23.66924868544275,37.0,103.0,289.71092415332794,112.98920608582162,90.20861360232036,416.8158105889956

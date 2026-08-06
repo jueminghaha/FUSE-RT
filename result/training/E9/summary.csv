@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E9,M2 joint multitask × R2 no device + multitask heads,10,True,34.73845378580584,2.251458842794037,31.92265915034712,39.19830758292871,62.8,21.28014202124705,21.0,93.0,280.57717229247095,110.29366681493796,108.0417694091797,450.2098540822665

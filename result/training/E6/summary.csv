@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E6,M1 RadonPy pretrain × R2 no device + multitask heads,10,True,34.81470236155026,2.5651135391099746,30.852139443982377,38.238242716785024,65.3,18.415271440362268,37.0,90.0,243.35653809070587,73.12008703776472,159.4315307855606,399.51521147489547

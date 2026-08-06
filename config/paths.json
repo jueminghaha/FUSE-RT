@@ -1,0 +1,8 @@
+{
+  "report_root": "data/RepoRT_latest",
+  "data_dir": "data/raw",
+  "metadata_csv": "data/proc_metadata_sw_20250405.csv",
+  "method_ids_csv": "data/processed/method_selection_179/our_179_method_ids.csv",
+  "split_root": "data/processed/exact_full_inchikey_split_6_2_2",
+  "split_root_180": "data/processed/exact_full_inchikey_split_6_2_2_180dataset"
+}

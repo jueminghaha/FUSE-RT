@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E3,M0 no PolyOmics × R2 no device + multitask heads,10,True,38.81284915197677,2.52858125911318,34.64479171037411,41.80252719336361,55.6,24.400364296005453,17.0,93.0,229.33267985383668,98.62471605583659,82.8121485789617,404.4584723393122

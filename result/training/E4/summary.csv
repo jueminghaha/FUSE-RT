@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E4,M1 RadonPy pretrain × R0 device encoder + single head,10,True,37.63579385494219,2.3953268482536045,33.704319281077524,42.03960431424573,70.3,26.6877000382823,27.0,119.0,157.8960937496026,38.630623871850595,93.9847076733907,220.94904658794405

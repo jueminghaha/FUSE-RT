@@ -1,0 +1,2 @@
+EXP_ID,EXP_NAME,n_completed_seeds,weight_only,best_valid_score_mean,best_valid_score_std,best_valid_score_min,best_valid_score_max,best_epoch_mean,best_epoch_std,best_epoch_min,best_epoch_max,elapsed_min_mean,elapsed_min_std,elapsed_min_min,elapsed_min_max
+E2,M0 no PolyOmics × R1 device encoder + multitask heads,10,True,35.23581950047641,2.7777398388885164,31.31289301287404,39.93209546506801,73.2,18.665476152512156,42.0,99.0,248.3554306034247,98.52886890867642,99.69552654425304,374.4507274866104

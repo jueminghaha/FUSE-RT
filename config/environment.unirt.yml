@@ -1,0 +1,13 @@
+name: unirt
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - ipykernel
+  - rdkit
+  - numpy=1.26.4
+  - pandas=2.1.4
+  - scipy=1.11.4
+  - scikit-learn=1.7.2
+  - tqdm=4.68.2
