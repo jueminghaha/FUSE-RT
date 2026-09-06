@@ -229,7 +229,7 @@ export LD_PRELOAD="$CONDA_PREFIX/lib/libstdc++.so.6"
 
 Configure the local RepoRT snapshot in `config/paths.json`, then construct the method cohort and molecule-disjoint splits:
 
-The project-specific RadonPy and Shimadzu raw CSV exports are private local inputs and are not distributed in this repository. Before running data preparation or external-OOD evaluation, place authorized local copies at the paths and verify the SHA-256 checksums listed in `data/source_manifest.csv`. The RadonPy file is required to rebuild the cohort and train E4–E9 or auxiliary-scaling experiments; the two Shimadzu files are required for the corresponding external-OOD analyses.
+The project-specific RadonPy raw CSV export is a private local input and is not distributed in this repository. Before running data preparation, place an authorized local copy at the path and verify the SHA-256 checksum listed in `data/source_manifest.csv`. This file is required to rebuild the cohort and train E4–E9 or auxiliary-scaling experiments. External-OOD evaluation uses RepoRT data only.
 
 ```bash
 python data/select_179_methods.py
@@ -281,6 +281,8 @@ checkpoints/  local weights and graph caches; excluded from Git
 ```
 
 Each evaluation retains one aggregate file and one seed-level file:
+
+The external-OOD tables retain only RepoRT records. The supplementary method `0186` records remain in the seed-level CSV and are not included in the six-method README benchmark. In historical support-index paths, `LEGACY_EXTERNAL_OOD_RUN` is a redacted directory label, not a downloadable location; support-index files are not distributed. The migration script preserves the curated external evaluator and result tables instead of rebuilding them from historical mixed-source runs.
 
 ```text
 result/internal_test_original/

@@ -593,7 +593,7 @@ def build_unirt_model_and_eval(source_root: Path, project_root: Path) -> None:
     )
     config_source = config_source.replace(
         "EXTERNAL_ROWS_CANDIDATES = [",
-        'EXTERNAL_ROWS_CANDIDATES = [\n    PROJECT_ROOT.parent / "RepoRT_PolyOmic/outputs/evaluation_E1_E9_OOD_kshot_lowoverlap_shimadzu/ood_rows_master_lowoverlap_shimadzu.csv",',
+        'EXTERNAL_ROWS_CANDIDATES = [\n    PROJECT_ROOT / "result/_runs/external_ood/ood_rows_master_lowoverlap.csv",',
     )
     config_source = config_source.replace(
         "FUSE_RT_METRICS_CANDIDATES = [",
@@ -655,39 +655,8 @@ for source_name, target_name in [
 
 
 def build_evaluation_scripts(source_root: Path, project_root: Path) -> None:
-    external_nb = source_root / "RepoRT_PolyOmic" / "13Evaluate_E1_E9_OOD_KShot_LowOverlap_Shimadzu_REALLY_FIXED.ipynb"
-    external_source = (
-        code_from_cells(external_nb, [10, 11, 12, 13, 14])
-        + "\n"
-        + keep_before_marker(code_from_cells(external_nb, [15]), "# Plot helpers.")
-        + "\n"
-        + code_from_cells(external_nb, [16, 17])
-    )
-    external = strip_server_specific_paths(
-        strip_ipython(external_source)
-    )
-    external = external.replace("import matplotlib.pyplot as plt", "")
-    external = external.replace("(EVAL_ROOT / 'figures').mkdir(parents=True, exist_ok=True)", "")
-    external = external.replace(
-        "# Cell B6. Summaries and separated errorbar + shaded-area plots",
-        "# Cell B6. Summary tables and ranks",
-    )
-    external = external.replace(
-        "#   Bypass matplotlib / inline plotting errors.",
-        "#   Aggregate the final CSV result tables.",
-    )
-    external = external.replace(
-        "EVAL_ROOT = WORKDIR / 'outputs' / 'evaluation_E1_E9_OOD_kshot_lowoverlap_shimadzu'",
-        "EVAL_ROOT = PROJECT_ROOT / 'result' / '_runs' / 'external_ood'",
-    ).replace("WEIGHT_ROOT = WORKDIR / 'outputs'", "WEIGHT_ROOT = PROJECT_ROOT / 'checkpoints' / 'experiments'")
-    external = re.sub(
-        r"(def configure_experiment_globals\([^\n]+\):\n)",
-        r"\1    engine.configure_experiment(str(meta['EXP_ID']))\n",
-        external,
-        count=1,
-    )
-    external += '''\n\n# Refresh the two report-facing tables after a successful evaluation.\nCURATED_ROOT = PROJECT_ROOT / "result" / "external_ood"\nCURATED_ROOT.mkdir(parents=True, exist_ok=True)\nfor source_name, target_name in [\n    ("summary_by_ood_tier_experiment_K.csv", "summary.csv"),\n    ("ood_kshot_metrics_all_runs.csv", "per_model_seed.csv"),\n]:\n    source_path = EVAL_ROOT / source_name\n    if source_path.exists():\n        shutil.copy2(source_path, CURATED_ROOT / target_name)\n'''
-    write_text(project_root / "script" / "evaluate_external_ood.py", EVAL_HEADER + "\n" + external)
+    # Keep the curated RepoRT-only evaluator instead of rebuilding legacy tasks.
+    copy_curated_files(project_root, ("script/evaluate_external_ood.py",))
 
     internal_nb = source_root / "RepoRT_PolyOmic" / "14_Evaluate_E1_E9_InternalOOD_KShot_K0_5_20_30_100.ipynb"
     internal_source = (
@@ -846,6 +815,19 @@ def create_training_summary(per_seed: Path, destination: Path, exp_key: str) -> 
         writer.writerow(summary)
 
 
+def copy_curated_files(project_root: Path, relative_paths: Sequence[str]) -> None:
+    """Preserve curated files when migrating into this or another project."""
+    curated_root = Path(__file__).resolve().parents[1]
+    for relative in relative_paths:
+        source = curated_root / relative
+        destination = project_root / relative
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing curated file: {source}")
+        if source.resolve() != destination.resolve():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+
+
 def copy_two_table_result(source_dir: Path, destination_dir: Path, summary_name: str, per_seed_name: str) -> None:
     destination_dir.mkdir(parents=True, exist_ok=True)
     copy_if_exists(source_dir / summary_name, destination_dir / "summary.csv")
@@ -890,12 +872,11 @@ def curate_artifacts(source_root: Path, project_root: Path) -> None:
         writer.writeheader()
         writer.writerows(checkpoint_rows)
 
-    copy_two_table_result(
-        outputs / "evaluation_E1_E9_OOD_kshot_lowoverlap_shimadzu",
-        project_root / "result" / "external_ood",
-        "summary_by_ood_tier_experiment_K.csv",
-        "ood_kshot_metrics_all_runs.csv",
-    )
+    # Do not restore removed tasks from historical mixed-source outputs.
+    copy_curated_files(project_root, (
+        "result/external_ood/summary.csv",
+        "result/external_ood/per_model_seed.csv",
+    ))
     copy_two_table_result(
         outputs / "evaluation_E1_E9_internal_heldout_OOD_kshot",
         project_root / "result" / "internal_ood",
@@ -935,8 +916,6 @@ def curate_artifacts(source_root: Path, project_root: Path) -> None:
     )
 
     data_sources = [
-        source_root / "Data" / "shimazu_data_20241223_integrated.csv",
-        source_root / "Data" / "shimazu_data_20251120_integraded.csv",
         source_root / "Data" / "RadonPy_20260611" / "RadonPySM_checkeq_masked.csv",
     ]
     data_manifest = []

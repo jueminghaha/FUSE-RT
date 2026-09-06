@@ -1,4 +1,2 @@
 local_path,publication_status,size_bytes,sha256,note
-data/raw/shimazu_data_20241223_integrated.csv,private_local_only,656573,4f3388d0dea64601879e9150dc178c62448b4ff1e2dc48bd323e6c44388fda6c,Not distributed; provide an authorized local copy
-data/raw/shimazu_data_20251120_integraded.csv,private_local_only,657886,6728b733ad15800d874fc99da8805309ab21c1e2326a8eeb788ad66212f09f6d,Not distributed; provide an authorized local copy
 data/raw/RadonPy_20260611/RadonPySM_checkeq_masked.csv,private_local_only,68430770,1c2feb1feef1c509812007d464e3a251c42e754357167dfb67bb12fc75c10079,Not distributed; provide an authorized local copy

@@ -50,10 +50,9 @@ EVAL_ROOT.mkdir(parents=True, exist_ok=True)
 WEIGHT_ROOT = PROJECT_ROOT / 'checkpoints' / 'experiments'
 PREFER_CHECKPOINTS = ['best_model.pt', 'best_joint.pt', 'best_rt.pt', 'final_model.pt']
 
-# OOD sets: use the selected low-overlap RepoRT methods and Shimadzu external data.
+# OOD sets: use only the selected low-overlap RepoRT methods.
 LOW_OVERLAP_METHOD_IDS = ['0391', '0390', '0437', '0420', '0419', '0411']
 INCLUDE_LOW_OVERLAP_OOD = True
-INCLUDE_SHIMADZU_OOD = True
 
 # Main protocol requested:
 # - R0 single-head models: zero-shot only.
@@ -85,17 +84,6 @@ FAIL_FAST = False
 FILTER_LOW_OVERLAP_BY_OUR179_MOLKEYS = True
 DEDUP_LOW_OVERLAP_BY_MOL_KEY = True
 
-# Shimadzu settings. 0.52 and 0.60 are both included; unavailable conditions are skipped with an audit table.
-SHIMADZU_TARGET_TEMP = 50.0
-SHIMADZU_TARGET_ACN_VALUES = [0.60]
-SHIMADZU_TEMP_TOL = 1e-6
-SHIMADZU_ACN_TOL = 1e-6
-SHIMADZU_COLUMN_HINT = 'C18'
-# Keep this False to match the earlier Shimadzu K-shot notebook protocol.
-# Set True only if you explicitly want molecule-clean Shimadzu OOD against the 179 RepoRT pool.
-FILTER_SHIMADZU_BY_OUR179_MOLKEYS = False
-DEDUP_SHIMADZU_BY_MOL_KEY = False
-
 # Experiment matrix.
 EXPERIMENTS = [
     {'EXP_ID':'E1', 'order':1, 'MOLECULE_MODE':'M0_no_aux',   'RT_ARCHITECTURE':'R0_device_single',  'EXP_NAME':'M0 no PolyOmics × R0 device encoder + single head',      'USE_DEVICE_METADATA':True,  'RT_HEAD_TYPE':'single', 'JOINT_MULTITASK':False, 'RADONPY_PERCENT':0,   'expected_best':'best_rt.pt',    'name_short':'M0-R0'},
@@ -125,7 +113,6 @@ print('LOW_OVERLAP_METHOD_IDS:', LOW_OVERLAP_METHOD_IDS)
 print('K_VALUES_MULTIHEAD:', K_VALUES_MULTIHEAD)
 print('single-head protocol: K=0 zero-shot only')
 print('multi-head protocol: frozen backbone + fresh OOD head, K only =', K_VALUES_MULTIHEAD)
-print('Shimadzu temp/acn:', SHIMADZU_TARGET_TEMP, SHIMADZU_TARGET_ACN_VALUES)
 
 
 
@@ -151,16 +138,6 @@ def first_existing_path_strict(paths, must_be_dir=None):
         if p.exists() and (must_be_dir is None or p.is_dir() == must_be_dir):
             return p
     raise FileNotFoundError('None of these paths exist:\n' + '\n'.join(map(str, [p for p in paths if p is not None])))
-
-
-def first_existing_file(paths):
-    for p in paths:
-        if p is None:
-            continue
-        p = Path(p)
-        if p.exists() and p.is_file():
-            return p
-    return None
 
 
 def _read_csv_flexible(path: Path, columns=None):
@@ -200,22 +177,44 @@ def _read_csv_flexible(path: Path, columns=None):
     return pd.DataFrame(norm_rows, columns=final_cols)
 
 
+def select_report_ood_rows(frame):
+    """Keep RepoRT tasks and task-independent audits when resuming old runs.
+
+    Preserve all recorded RepoRT methods, including supplementary methods not
+    in the default evaluation list. Never mix non-RepoRT tasks into summaries.
+    """
+    if frame.empty:
+        return frame.copy()
+    out = frame.copy()
+    keep = pd.Series(True, index=out.index)
+    if 'ood_tier' in out.columns:
+        tier = out['ood_tier'].fillna('').astype(str).str.strip()
+        keep &= tier.isin(['', 'new_report_low_overlap_ood'])
+    for column in ('ood_task_id', 'ood_method_id'):
+        if column in out.columns:
+            value = out[column].fillna('').astype(str).str.strip()
+            normalized = value.str.replace(r'\.0$', '', regex=True).str.zfill(4)
+            keep &= value.eq('') | normalized.str.fullmatch(r'\d{4}')
+            out[column] = value.where(value.eq(''), normalized)
+    return out.loc[keep].copy()
+
+
 def safe_read_csv(path, columns=None):
     path = Path(path)
     if (not path.exists()) or path.stat().st_size == 0:
         return pd.DataFrame(columns=columns or [])
     try:
-        return pd.read_csv(path)
+        return select_report_ood_rows(pd.read_csv(path, dtype={'ood_task_id': str, 'ood_method_id': str}))
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=columns or [])
     except pd.errors.ParserError as exc:
         print(f'[WARN] ParserError while reading {path.name}: {exc}. Trying flexible CSV reader.')
         try:
-            return _read_csv_flexible(path, columns=columns)
+            return select_report_ood_rows(_read_csv_flexible(path, columns=columns))
         except Exception as flex_exc:
             print(f'[WARN] Flexible CSV reader failed for {path.name}: {flex_exc}. Falling back to on_bad_lines="skip".')
             try:
-                return pd.read_csv(path, engine='python', on_bad_lines='skip')
+                return select_report_ood_rows(pd.read_csv(path, engine='python', on_bad_lines='skip', dtype={'ood_task_id': str, 'ood_method_id': str}))
             except Exception:
                 return pd.DataFrame(columns=columns or [])
     except Exception as exc:
@@ -242,7 +241,7 @@ def normalize_existing_csv_to_schema(path: Path, columns=None, label: str = 'csv
     # Detect parser problems with the strict parser.
     strict_ok = True
     try:
-        strict_df = pd.read_csv(path)
+        strict_df = pd.read_csv(path, dtype={'ood_task_id': str, 'ood_method_id': str})
     except Exception:
         strict_ok = False
         strict_df = None
@@ -255,11 +254,11 @@ def normalize_existing_csv_to_schema(path: Path, columns=None, label: str = 'csv
                 df[c] = np.nan
         # Keep known columns first, but preserve any extra columns at the end.
         df = df[[c for c in columns if c in df.columns] + [c for c in df.columns if c not in columns]]
-    need_rewrite = (not strict_ok)
+    need_rewrite = (not strict_ok) or len(strict_df) != len(df)
     if strict_ok and columns is not None:
         current_cols = list(strict_df.columns)
         desired_prefix = [c for c in columns if c in df.columns]
-        need_rewrite = current_cols[:len(desired_prefix)] != desired_prefix or len(current_cols) != len(df.columns)
+        need_rewrite = need_rewrite or current_cols[:len(desired_prefix)] != desired_prefix or len(current_cols) != len(df.columns)
     if need_rewrite:
         backup = _backup_path(path, 'schema_backup')
         try:
@@ -696,7 +695,7 @@ def compute_metric_dict(true_min, pred_min) -> Dict[str, Any]:
 
 
 # ============================================================
-# Cell B3. Load selected Low-overlap RepoRT OOD and Shimadzu OOD rows
+# Cell B3. Load selected low-overlap RepoRT OOD rows
 # ============================================================
 SMILES_CANDIDATES = [
     'smiles', 'SMILES', 'smiles.std', 'smiles_std', 'smiles.canonical',
@@ -869,181 +868,15 @@ def load_low_overlap_ood_all():
     return out_df, pd.DataFrame(summaries), pd.DataFrame(failed)
 
 
-def normalize_acn_ratio(x):
-    v = pd.to_numeric(x, errors='coerce')
-    if pd.isna(v):
-        return np.nan
-    v = float(v)
-    if v > 1.5:
-        v = v / 100.0
-    return v
+ood_all_df, ood_summary, ood_failed = load_low_overlap_ood_all()
+if ood_all_df.empty:
+    raise RuntimeError('No OOD rows were loaded. Check the RepoRT latest data path.')
+for column in ('ood_tier', 'ood_task_id', 'ood_method_id'):
+    ood_all_df[column] = ood_all_df[column].astype(str)
+if ood_failed.empty:
+    ood_failed = pd.DataFrame(columns=['ood_tier', 'error_type', 'error'])
 
-
-def bool_close_to_any(x, values, tol=1e-6):
-    if not np.isfinite(x):
-        return False
-    return any(abs(float(x) - float(v)) <= tol for v in values)
-
-
-def build_manual_shimadzu_env(temp_c, acn_ratio, column_name=SHIMADZU_COLUMN_HINT):
-    temp_scaled = float(temp_c) / 100.0 if np.isfinite(float(temp_c)) else -1.0
-    acn_scaled = float(acn_ratio) if np.isfinite(float(acn_ratio)) else -1.0
-    return {
-        'column_cont': [-1.0, -1.0, -1.0, temp_scaled, -1.0],
-        'column_cat': [normalize_phase_type(column_name)],
-        'brand_cat': ['Shimadzu'],
-        'solvent_cont': [acn_scaled, -1.0, -1.0],
-        'solvent_cat': ['h2o', 'acn'],
-        'gradient_cont': [0.0, acn_scaled, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
-        'operation_cont': [-1.0],
-        'family': 'RP',
-        'AB_switched': False,
-    }
-
-
-def find_data_dir_for_shimadzu() -> Path:
-    candidates = [
-        DATA_DIR if 'DATA_DIR' in globals() else None,
-        WORKDIR / 'Data',
-        WORKDIR / '../Data',
-        WORKDIR / '../../Data',
-        WORKDIR / '../../../Data',
-    ]
-    for d in candidates:
-        if d is not None and Path(d).exists():
-            return Path(d)
-    raise FileNotFoundError('Cannot find Data directory for Shimadzu raw CSV files.')
-
-
-def load_shimadzu_ood_all():
-    if not INCLUDE_SHIMADZU_OOD:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-    data_dir_local = find_data_dir_for_shimadzu()
-    print('Shimadzu DATA_DIR:', data_dir_local)
-    specs = {
-        'Shimadzu_20241223': {
-            'raw_candidates': [
-                data_dir_local / 'shimazu_data_20241223_integrated.csv',
-                data_dir_local / 'shimadzu_data_20241223_integrated.csv',
-            ],
-            'smiles_col': 'smiles_canonical',
-            'target_col': 'RT_min_subT0',
-            'temp_col': 'temp(C)',
-            'acn_col': 'ACN_ratio',
-        },
-        'Shimadzu_20251120': {
-            'raw_candidates': [
-                data_dir_local / 'shimazu_data_20251120_integraded.csv',
-                data_dir_local / 'shimazu_data_20251120_integrated.csv',
-                data_dir_local / 'shimadzu_data_20251120_integrated.csv',
-            ],
-            'smiles_col': 'smiles_canonical',
-            'target_col': 'RT_min_subT0',
-            'temp_col': 'temp(C)',
-            'acn_col': 'ACN_ratio',
-        },
-    }
-    frames, summaries, failed = [], [], []
-    for source, spec in specs.items():
-        try:
-            raw_path = first_existing_file(spec['raw_candidates'])
-            if raw_path is None:
-                raise FileNotFoundError(f'Missing Shimadzu raw file for {source}. Tried={spec["raw_candidates"]}')
-            raw = pd.read_csv(raw_path)
-            smiles_col, y_col, temp_col, acn_col = spec['smiles_col'], spec['target_col'], spec['temp_col'], spec['acn_col']
-            missing_cols = [c for c in [smiles_col, y_col, temp_col, acn_col] if c not in raw.columns]
-            if missing_cols:
-                raise ValueError(f'{raw_path} missing columns={missing_cols}. Available={list(raw.columns)}')
-            df = raw.copy()
-            df['_temp_num'] = pd.to_numeric(df[temp_col], errors='coerce')
-            df['_acn_norm'] = df[acn_col].map(normalize_acn_ratio)
-            df['_rt_num'] = pd.to_numeric(df[y_col], errors='coerce')
-            df['_smiles'] = df[smiles_col].astype(str).str.strip()
-            valid = (
-                df['_smiles'].notna()
-                & ~df['_smiles'].str.lower().isin(['', 'nan', 'none'])
-                & df['_rt_num'].notna()
-                & df['_temp_num'].apply(lambda x: np.isfinite(x) and abs(float(x) - SHIMADZU_TARGET_TEMP) <= SHIMADZU_TEMP_TOL)
-                & df['_acn_norm'].apply(lambda x: bool_close_to_any(x, SHIMADZU_TARGET_ACN_VALUES, SHIMADZU_ACN_TOL))
-            )
-            selected = df.loc[valid].copy()
-            if len(selected) == 0:
-                avail = (df.dropna(subset=['_temp_num', '_acn_norm']).groupby(['_temp_num', '_acn_norm']).size().rename('rows').reset_index().sort_values('rows', ascending=False).head(20))
-                summaries.append({'ood_tier':'shimadzu_external_ood', 'source':source, 'raw_file':str(raw_path), 'status':'no_rows_for_requested_condition', 'n_rows_after_filter_dedup':0, 'available_conditions_preview': avail.to_dict('records')})
-                print(f'WARNING: {source} has 0 rows for temp={SHIMADZU_TARGET_TEMP} and ACN={SHIMADZU_TARGET_ACN_VALUES}.')
-                display(avail)
-                continue
-            selected['mol_key'] = selected['_smiles'].map(smiles_to_key_safe)
-            selected = selected.dropna(subset=['mol_key']).copy()
-            selected['appears_in_our179_all'] = selected['mol_key'].isin(our179['all_molkeys'])
-            if FILTER_SHIMADZU_BY_OUR179_MOLKEYS:
-                selected = selected[~selected['appears_in_our179_all']].copy()
-            if DEDUP_SHIMADZU_BY_MOL_KEY:
-                selected = selected.drop_duplicates('mol_key', keep='first').copy()
-            selected = selected.reset_index(drop=True)
-            for acn_val, g in selected.groupby('_acn_norm', sort=True):
-                condition_label = f"T{int(SHIMADZU_TARGET_TEMP)}_ACN{str(float(acn_val)).replace('.', 'p')}"
-                ood_task_id = f'{source}_{condition_label}'
-                env = build_manual_shimadzu_env(SHIMADZU_TARGET_TEMP, float(acn_val))
-                out = pd.DataFrame({
-                    'split': 'shimadzu_external_ood',
-                    'ood_tier': 'shimadzu_external_ood',
-                    'source': source,
-                    'condition_label': condition_label,
-                    'ood_method_id': ood_task_id,
-                    'ood_task_id': ood_task_id,
-                    'dir': ood_task_id,
-                    'row_id': [f'{ood_task_id}_{i:06d}' for i in range(len(g))],
-                    'smiles': g['_smiles'].values,
-                    'mol_key': g['mol_key'].values,
-                    'rt': g['_rt_num'].astype(float).values,
-                    'temp_C': float(SHIMADZU_TARGET_TEMP),
-                    'ACN_ratio': float(acn_val),
-                    'appears_in_our179_all': g['appears_in_our179_all'].values,
-                    'clean_radonpy_overlap': False,
-                    'non_radonpy_overlap': False,
-                })
-                for k, v in env.items():
-                    out[k] = [v for _ in range(len(out))]
-                frames.append(out)
-                summaries.append({
-                    'ood_tier': 'shimadzu_external_ood',
-                    'source': source,
-                    'condition_label': condition_label,
-                    'ood_task_id': ood_task_id,
-                    'raw_file': str(raw_path),
-                    'temp_C': float(SHIMADZU_TARGET_TEMP),
-                    'ACN_ratio': float(acn_val),
-                    'n_rows_after_filter_dedup': int(len(out)),
-                    'n_unique_mol_key': int(out['mol_key'].nunique()),
-                    'n_overlap_our179_all': int(out['appears_in_our179_all'].sum()),
-                    'FILTER_SHIMADZU_BY_OUR179_MOLKEYS': bool(FILTER_SHIMADZU_BY_OUR179_MOLKEYS),
-                    'DEDUP_SHIMADZU_BY_MOL_KEY': bool(DEDUP_SHIMADZU_BY_MOL_KEY),
-                    'status': 'ok',
-                })
-                print(f'Loaded Shimadzu {ood_task_id}: rows={len(out):,}, mols={out["mol_key"].nunique():,}')
-        except Exception as exc:
-            failed.append({'ood_tier':'shimadzu_external_ood', 'source':source, 'error_type': type(exc).__name__, 'error': str(exc), 'traceback': traceback.format_exc()})
-            print(f'FAILED Shimadzu {source}: {repr(exc)}')
-    out_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    return out_df, pd.DataFrame(summaries), pd.DataFrame(failed)
-
-low_df, low_summary, low_failed = load_low_overlap_ood_all()
-shim_df, shim_summary, shim_failed = load_shimadzu_ood_all()
-
-all_ood_frames = [x for x in [low_df, shim_df] if x is not None and len(x)]
-if not all_ood_frames:
-    raise RuntimeError('No OOD rows were loaded. Check RepoRT latest and Shimadzu data paths.')
-
-ood_all_df = pd.concat(all_ood_frames, ignore_index=True)
-ood_all_df['ood_tier'] = ood_all_df['ood_tier'].astype(str)
-ood_all_df['ood_task_id'] = ood_all_df['ood_task_id'].astype(str)
-ood_all_df['ood_method_id'] = ood_all_df['ood_method_id'].astype(str)
-
-ood_summary = pd.concat([low_summary, shim_summary], ignore_index=True) if len(low_summary) or len(shim_summary) else pd.DataFrame()
-ood_failed = pd.concat([low_failed, shim_failed], ignore_index=True) if len(low_failed) or len(shim_failed) else pd.DataFrame(columns=['ood_tier','error_type','error'])
-
-ood_all_df.to_csv(EVAL_ROOT / 'ood_rows_master_lowoverlap_shimadzu.csv', index=False)
+ood_all_df.to_csv(EVAL_ROOT / 'ood_rows_master_lowoverlap.csv', index=False)
 ood_summary.to_csv(EVAL_ROOT / 'ood_task_loading_summary.csv', index=False)
 ood_failed.to_csv(EVAL_ROOT / 'ood_task_loading_failed.csv', index=False)
 
@@ -1056,7 +889,7 @@ if len(ood_failed):
     display(ood_failed[['ood_tier', 'error_type', 'error']].head(50))
 
 # Build a shared graph cache for all selected OOD molecules.
-OOD_GRAPH_CACHE_PATH = EVAL_ROOT / '_shared' / 'pyg_graph_cache_lowoverlap_shimadzu.pt'
+OOD_GRAPH_CACHE_PATH = EVAL_ROOT / '_shared' / 'pyg_graph_cache_lowoverlap.pt'
 OOD_GRAPH_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
 ood_graph_cache = PrecomputedPyGGraphCache(OOD_GRAPH_CACHE_PATH)
 ood_graph_cache.build(ood_all_df['smiles'], save=True)
@@ -1591,8 +1424,6 @@ config_manifest = {
     'protocol': 'R0 single-head zero-shot only; R1/R2 multi-head frozen-backbone K-shot fresh head only',
     'low_overlap_method_ids': LOW_OVERLAP_METHOD_IDS,
     'k_values_multihead': K_VALUES_MULTIHEAD,
-    'shimadzu_target_temp': SHIMADZU_TARGET_TEMP,
-    'shimadzu_target_acn_values': SHIMADZU_TARGET_ACN_VALUES,
     'pair_support_seed_with_model_seed': PAIR_SUPPORT_SEED_WITH_MODEL_SEED,
     'support_random_seeds': SUPPORT_RANDOM_SEEDS,
     'ood_head_epochs': OOD_HEAD_EPOCHS,
@@ -1637,7 +1468,7 @@ import pandas as pd
 try:
     EVAL_ROOT = Path(EVAL_ROOT)
 except NameError:
-    EVAL_ROOT = Path("outputs/evaluation_E1_E9_OOD_kshot_lowoverlap_shimadzu")
+    EVAL_ROOT = PROJECT_ROOT / 'result' / '_runs' / 'external_ood'
 
 NO_PLOT_OUT = EVAL_ROOT / "aggregate_no_plot"
 NO_PLOT_OUT.mkdir(parents=True, exist_ok=True)
@@ -1662,16 +1493,16 @@ def robust_read_csv(path: Path, columns=None):
     if (not path.exists()) or path.stat().st_size == 0:
         return pd.DataFrame(columns=columns or [])
     try:
-        return pd.read_csv(path)
+        return select_report_ood_rows(pd.read_csv(path, dtype={'ood_task_id': str, 'ood_method_id': str}))
     except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=columns or [])
     except pd.errors.ParserError as e:
         print(f"[WARN] ParserError reading {path.name}; retry with python engine and skip bad lines.")
         try:
-            return pd.read_csv(path, engine="python", on_bad_lines="skip")
+            return select_report_ood_rows(pd.read_csv(path, engine="python", on_bad_lines="skip", dtype={'ood_task_id': str, 'ood_method_id': str}))
         except TypeError:
             # older pandas fallback
-            return pd.read_csv(path, engine="python", error_bad_lines=False)
+            return select_report_ood_rows(pd.read_csv(path, engine="python", error_bad_lines=False, dtype={'ood_task_id': str, 'ood_method_id': str}))
 
 def scalarize_metric_value(x):
     """
@@ -1850,7 +1681,7 @@ best_task.to_csv(best_task_path, index=False)
 # -----------------------------
 # 3) Task-macro summary by OOD tier / experiment / K
 #    This gives each OOD task equal weight after task-level averaging.
-#    Useful because 0391/0390 are huge while Shimadzu/0411 are tiny.
+#    Give each RepoRT task equal weight despite different dataset sizes.
 # -----------------------------
 macro_rows = []
 macro_source = task_summary.copy()
@@ -1980,4 +1811,4 @@ for source_name, target_name in [
 ]:
     source_path = EVAL_ROOT / source_name
     if source_path.exists():
-        shutil.copy2(source_path, CURATED_ROOT / target_name)
+        safe_read_csv(source_path).to_csv(CURATED_ROOT / target_name, index=False)

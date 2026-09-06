@@ -134,7 +134,7 @@ UNI_RT_OUTPUT_ROOT_CANDIDATES = [
 
 # Prefer the exact clean OOD rows produced by the FUSE-RT OOD evaluation pipeline.
 EXTERNAL_ROWS_CANDIDATES = [
-    PROJECT_ROOT.parent / "RepoRT_PolyOmic/outputs/evaluation_E1_E9_OOD_kshot_lowoverlap_shimadzu/ood_rows_master_lowoverlap_shimadzu.csv",
+    PROJECT_ROOT / "result/_runs/external_ood/ood_rows_master_lowoverlap.csv",
     WORKDIR / "outputs/randonpy_f6/09_new_report_low_overlap_ood_kshot_layer2_cached/external_methods_clean_molecule_rows.csv",
     WORKDIR / "../outputs/randonpy_f6/09_new_report_low_overlap_ood_kshot_layer2_cached/external_methods_clean_molecule_rows.csv",
     WORKDIR / "../../outputs/randonpy_f6/09_new_report_low_overlap_ood_kshot_layer2_cached/external_methods_clean_molecule_rows.csv",
