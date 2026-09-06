@@ -15,3 +15,6 @@ data/processed/
 
 # Project-specific raw exports are private local inputs and are not distributed.
 /data/raw/
+
+# Rebuild consolidated metadata from the local RepoRT snapshot.
+/data/proc_metadata_sw_20250405.csv

@@ -232,11 +232,22 @@ Configure the local RepoRT snapshot in `config/paths.json`, then construct the m
 The project-specific RadonPy raw CSV export is a private local input and is not distributed in this repository. Before running data preparation, place an authorized local copy at the path and verify the SHA-256 checksum listed in `data/source_manifest.csv`. This file is required to rebuild the cohort and train E4–E9 or auxiliary-scaling experiments. External-OOD evaluation uses RepoRT data only.
 
 ```bash
+python data/build_global_metadata.py
 python data/select_179_methods.py
 python data/build_exact_splits.py
 ```
 
-`metadata_csv` is optional. If it is unavailable, chromatographic features are constructed directly from `RepoRT_latest/processed_data/<method_id>/<method_id>_metadata.tsv`.
+Generate the consolidated metadata CSV before training with the current engine. The standard-library-only script `data/build_global_metadata.py` reads every four-digit method directory under the configured `report_root/processed_data`, matches fields by their TSV headers, and writes one row per method to the configured `metadata_csv` (default: `data/proc_metadata_sw_20250405.csv`). Its first column is the four-digit method ID, compatible with the training engine's index-based CSV reader. It requires no RadonPy data, model weights, PyTorch, or GPU.
+
+To use another local RepoRT snapshot or output location:
+
+```bash
+python data/build_global_metadata.py --report-root /path/to/RepoRT_latest --output /path/to/global_metadata.csv
+```
+
+When using `--output`, update `metadata_csv` in `config/paths.json` to that location before training. Existing output files are protected unless `--overwrite` is supplied. Missing metadata files, duplicate headers, mismatched method IDs, and multiple metadata rows cause an error before the output is opened.
+
+The generated CSV is a local artifact, not a bundled dataset. Original values and blanks are preserved without imputation. The current engine's legacy positional TSV fallback is unsafe for mismatched column orders; generating this CSV provides named fields where source values exist, but does not repair fallback behavior for missing values. Check missing environment fields before a full training run.
 
 ### Training
 
